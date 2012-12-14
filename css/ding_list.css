@@ -1,0 +1,21 @@
+.ding-list {
+  /*border-top: 2px solid black;*/
+
+}
+
+.ding-list .tabs li {
+  display:inline;
+  list-style-type: none;
+}
+
+.ding-list .navigation {
+  /*float:right;*/
+}
+
+.ding-list .tab-hidden {
+  display:none;
+}
+
+.ding-list .tabs .tab-active {
+  /*background-color:#eee;*/
+}

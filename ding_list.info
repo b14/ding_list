@@ -1,0 +1,9 @@
+; $Id$
+name = Ding list module
+description = Base and API for personal lists
+core = 7.x
+version = "7.x-1.0-dev"
+package = b14site
+files[] = ding_list.module
+scripts[] = js/ding_list.js
+stylesheets[all][] = css/ding_list.css
