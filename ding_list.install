@@ -1,22 +1,14 @@
 <?php
+/**
+ * @file
+ * Install
+ */
 
-function ding_list_update_7205() {
-  // if (module_exists('ting_openlist')) {
-    $entity_type = EntityType::loadByName('ding_type');
-    $entity_type->addProperty('openlist_id', 'Openlist ID', 'integer');
-    // $entity_type->addProperty('openlist_modified', 'Openlist modified', 'integer');
-    $entity_type->save();
-  // }
-}
-
-function ding_list_update_7208() {
-  $schema['contact'] = array(); // <- Why the contact ?
+/**
+ * Implements hook_install().
+ */
+function ding_list_install() {
+  $schema = array();
   ding_list_schema_alter($schema);
   db_add_field('users', 'openlist_modified', $schema['users']['fields']['openlist_modified']);
-}
-
-function ding_list_update_7209() {
-  $entity_type = EntityType::loadByName('ding_type');
-  $entity_type->removeProperty('openlist_modified');
-  $entity_type->save();
 }

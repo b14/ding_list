@@ -41,9 +41,10 @@ function ding_list_user_list_ctools_access_check($conf, $context) {
     return FALSE;
   }
   $result = ding_list_get_list(arg(2), $context->data);
-  if($conf['user_is_owner']) {
+  if ($conf['user_is_owner']) {
     return $result->uid == $context->data->uid;
-  } else {
+  }
+  else {
     return $result->uid != $context->data->uid;
   }
 }

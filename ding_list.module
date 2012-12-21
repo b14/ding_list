@@ -1,9 +1,10 @@
 <?php
+/**
+ * @file
+ * Basic ding_list module
+ */
 
-/*
-* Core defined types of lists
-* 
-*/
+// Core defined types of lists
 define('DING_LIST_TYPE_USER_LIST', 'user_list');    // Manual user lists
 define('DING_LIST_TYPE_FOLLOW', 'follow');          // Followed taxonomy terms
 define('DING_LIST_TYPE_SEARCHES', 'user_searches'); // Search strings
@@ -50,6 +51,7 @@ $GLOBALS['list_operations'] = array(
   ),
   DING_LIST_TYPE_BOOKS_READ => array(
     DING_LIST_OPERATION_AUTO_CREATE,
+    DING_LIST_OPERATION_SORT,
     '_data' => array(
       'default_title' => t('Bøger jeg har læst')
     ),
@@ -64,45 +66,44 @@ $GLOBALS['list_operations'] = array(
   )
 );
 
-// $id$
-
-/**
- * @file
- * empty module which is used for custom development.
- *
- * Description of the module.
- */
-
 //
 // Include seperate hook files
 //
 
-$currentFileDir = dirname(__FILE__);
-require_once($currentFileDir . '/theme/theme.inc');
-require_once($currentFileDir . '/hook/block.inc');
-require_once($currentFileDir . '/hook/menu.inc');
-require_once($currentFileDir . '/include/form.inc');
-require_once($currentFileDir . '/include/functions.inc');
+$current_dir = dirname(__FILE__);
+require_once $current_dir . '/theme/theme.inc';
+require_once $current_dir . '/hook/block.inc';
+require_once $current_dir . '/hook/menu.inc';
+require_once $current_dir . '/include/form.inc';
+require_once $current_dir . '/include/functions.inc';
 
 /**
  * Implements hook_ctools_plugin_directory().
  */
 function ding_list_ctools_plugin_directory($owner, $plugin_type) {
   if ($owner == 'ctools') {
-    if($plugin_type == 'content_types') {
-      return 'plugins/content_types';
-    }
-    elseif($plugin_type == 'access') {
+    if ($plugin_type == 'access') {
       return 'plugins/access';
     }
   }
 }
 
+/**
+ * Implements hook_user_login().
+ *
+ * Synchronize with openlist, create missing lists and update the historical
+ * loans list.
+ */
 function ding_list_user_login(&$edit, $account) {
-  // Synchronize with openlist
-  ding_list_sync_openlist();
+  if (module_exists('ting_openlist')) {
+    if (ting_openlist_current_user_identifier() === FALSE) {
+      ting_openlist_user_login($edit, $account);
+    }
+    // Synchronize with openlist
+    ding_list_sync_openlist();
+  }
     
-  // Create anymissing autocreated lists.
+  // Create any missing autocreated lists.
   ding_list_setup_autocreated();
   
   // Update the historical loans.
@@ -128,32 +129,24 @@ function ding_list_action_button_list($context) {
     case "TingEntity":
     case "search_result":
       $lists = ding_list_get_lists(ding_list_get_list_types_by_operations(DING_LIST_OPERATION_ATTACH_TING_OBJECT), $user);
-      // @TODO: ding_list_get_recent_list($max);
       if ($lists !== FALSE) {
-        // $history = ding_list_get_list(DING_LIST_TYPE_LOAN_HISTORY);
-        // if(isset($history)) {
-          // $hid = $history->id;
-        // }
         foreach ($lists as $id => $list) {
-          // if(!isset($hid) || $id != $hid) {
-            if ($element = ding_list_has_ding_list_element($list, 'ting_object', $context['id'])) {
-              $options["list_$id"] = array(
-                '#theme' => 'link',
-                '#text' => t('Remove from @name', array('@name' => $list->title)),
-                '#callback' => format_string('dinglist/detach/@id/@remove', array('@id' => $id, '@remove' => $element->id)),
-              );
-            }
-            else {
-              $options["list_$id"] = array(
-                '#theme' => 'link',
-                '#text' => t('Add to @name', array('@name' => $list->title)),
-                '#callback' => format_string('dinglist/attach/ting_object/@id/@obj', array('@id' => $id, '@obj' => $context['id'])),
-              );
-            }
-          // }
+          if ($element = ding_list_has_ding_list_element($list, 'ting_object', $context['id'])) {
+            $options["list_$id"] = array(
+              '#theme' => 'link',
+              '#text' => t('Remove from @name', array('@name' => $list->title)),
+              '#callback' => format_string('dinglist/detach/@id/@remove', array('@id' => $id, '@remove' => $element->id)),
+            );
+          }
+          else {
+            $options["list_$id"] = array(
+              '#theme' => 'link',
+              '#text' => t('Add to @name', array('@name' => $list->title)),
+              '#callback' => format_string('dinglist/attach/ting_object/@id/@obj', array('@id' => $id, '@obj' => $context['id'])),
+            );
+          }
         }
       }
-      // @TODO Add current object to a new list. Pass by GET?
       $options["list"] = array(
         '#theme' => 'link',
         '#text' => t('Tilføj til en ny liste'),
@@ -197,93 +190,14 @@ function ding_list_action_button_list($context) {
           );
         }
       }
-      else {
-      /*
-        WAIT WITH GROUP; It's tricky tricky tricky
-        $result = ding_list_get_lists($user, DING_LIST_TYPE_USER_LIST, array(0, 10));
-        if (!empty($result)) {
-          $lists = entity_load('ding_type', array_keys($result['ding_type']));
-          foreach($lists as $id => $list) {
-            if ($context['id'] != $list->id) {
-              $options["list_$id"] = array(
-                '#theme' => 'link',
-                '#text' => t('Add to @name', array('@name' => $list->title)),
-                '#callback' => format_string('dinglist/attach/ting_object/@id/REPLACE_ME', array('@id' => $id)),
-              );
-            } else {
-              $options["list_$id"] = array(
-                '#theme' => 'link',
-                '#text' => t('Remove from @name', array('@name' => $list->title)),
-                '#callback' => format_string('dinglist/detach/@id/REPLACE_ME', array('@id' => $id)),
-              );
-            }
-          }
-        }
-      */
-      }
     break;
   }
   return $options;
 }
 
 /**
- * Load recent nodes tagged with $tids
- *
- * @paramn $tids
- *  An array of taxonomy term ids to match with nodes. The function will Load
- *  nids of nodes which are tagged with one or more of these ids.
- *  This parameter is required.
- * @param $type
- *  If provided the result will only contain nodes of this node type.
- * @param $limit
- *  If provided the result will be limited to this number.
- *
- * @return
- *  An array of nids tagged with one or more of the provided taxonomy terms.
+ * Implements hook_entity_property_info_alter().
  */
-function ding_list_tids_to_nids($tids, $type = FALSE, $limit = FALSE) {
-
-  // No tids no nids
-  if (!isset($tids) || count($tids) == 0) {
-    return array();
-  }
-  // Setup select query with the provided tids as a condition
-  $query = db_select('taxonomy_index', 't')
-    ->condition('tid', $tids, 'IN')
-    ->addTag('node_access');
-  // Join the node table
-  $query->join('node', 'n', 'n.nid = t.nid');
-
-  // If a limit has been provided add this to the query
-  if ($limit !== FALSE) {
-    $query->range(0, $limit);
-  }
-
-  // Published nodes only
-  $query->condition('n.status', 1);
-
-  // If a limit has been provided filter on thi type condition
-  if ($type !== FALSE) {
-    $query->condition('n.type', $type);
-  }
-  // Select the nid and order by the time of creation.
-  $query->addField('t', 'nid');
-  $query->orderBy('t.created', "DESC");
-  // Return the column of nids.
-  return $query->execute()->fetchCol();
-}
-
-function ding_list_init() {
-  global $user;
-  if ($user->uid == 3 && request_uri() == '/da/user/manage-lists') {
-  
-    // ding_list_sync_openlist();
-  }
-}
-
-
-// These add information about the new openlist_modified field.
-// Can these be placed in the .install?
 function ding_list_entity_property_info_alter(&$info) {
   $properties = &$info['user']['properties'];
 
@@ -296,6 +210,9 @@ function ding_list_entity_property_info_alter(&$info) {
     'setter callback' => 'entity_property_verbatim_set',
   );
 }
+/**
+ * Implements hook_schema_alter().
+ */
 function ding_list_schema_alter(&$schema) {
   $schema['users']['fields']['openlist_modified'] = array(
     'type' => 'int', 
@@ -306,14 +223,14 @@ function ding_list_schema_alter(&$schema) {
 }
 
 /**
- * Implements hook_consent_changed
+ * Implements hook_consent_changed().
  */
 function ding_list_consent_changed($consent) {
   // If loan_history_store consent has been revoked, remove all lists.
-  if(isset($consent['loan_history_store']) && $consent['loan_history_store'] === FALSE) {
+  if (isset($consent['loan_history_store']) && $consent['loan_history_store'] === FALSE) {
     $lists = ding_list_get_lists();
-    if(!empty($lists)) {
-      foreach($lists as $id => $list) {
+    if (!empty($lists)) {
+      foreach ($lists as $id => $list) {
         ding_list_delete_list($id);
       }
     }
@@ -321,5 +238,34 @@ function ding_list_consent_changed($consent) {
     
     drupal_set_message(t("Your personal lists has now been deleted."));
     
+  }
+}
+
+/**
+ * Implements hook_theme().
+ *
+ */
+function ding_list_theme() {
+  return array(
+    'ding_list_mode_toggler' => array(
+      'variables' => array(
+        'modes' => array(t('Compact'), t('Expanded')),
+        'default' => 'expanded'
+      )
+    ),
+    'ding_list_list'  => array(
+      'template' => 'theme/ding-list-list',
+      'variables' => array(
+        'items' => array(),
+        'sortable' => FALSE,
+        'toggler' => TRUE
+      ),
+    ),
+  );
+}
+
+function ding_list_init() {
+  if (request_uri() == '/da/user') {
+    // ding_list_setup_autocreated();
   }
 }

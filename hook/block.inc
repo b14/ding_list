@@ -5,15 +5,10 @@
  *
  */
 
+ /**
+ * Implements hook_block_info().
+ */
 function ding_list_block_info() {
-  $lists = ding_list_get_blocks();
-  $blocks = array();
-  foreach ($lists as $list => $info) {
-    $blocks[$list] = array(
-      'info' => "Ding list:$list",
-      'cache' => DRUPAL_NO_CACHE,
-    );
-  }
   $blocks['search_link'] = array(
     'info' => "Link to term search result",
   );
@@ -25,12 +20,33 @@ function ding_list_block_info() {
   return $blocks;
 }
 
+/**
+ * Implements hook_block_view().
+ */
 function ding_list_block_view($delta) {
   
   $block = array();
   switch ($delta) {
   case 'create_ding_list':
-    $block['content'] = drupal_get_form('ding_list_create_list_form');
+  
+    $block['content'] = array(
+      '#theme' => 'ding_tabs',
+      '#name' => 'your_lists',
+      '#title' => t('Opret liste', array(), array('langcode' => 'da')),
+      '#navigation' => 'What is navigation',
+      '#more_title' => 'Læs mere her',
+      '#more_link' => 'page/samtykke',
+      '#mode_tabs' => array(),
+      '#tabs' => array(
+        'lists' => array(
+          '#theme' => 'ding_tabs_content',
+          '#title' => '',
+          '#content' => drupal_get_form('ding_list_create_list_form'),
+          '#type' => 'render',
+          '#no_tab_link' => TRUE,
+        ),
+      ),
+    );
   break;
   case 'search_link':
     if(arg(0) == 'taxonomy' && arg(1) == 'term' && is_numeric(arg(2))) {
@@ -53,55 +69,6 @@ function ding_list_block_view($delta) {
       );
     }
     break;
-  default:
-    // Manual block hide via taxonomy/term/$tid/edit
-    if (main_subterms_is_block_hidden($delta)) {
-      return array();
-    }
-    
-    module_load_include('inc', 'ding_list', 'include/block_definitions');
-    $caller = "ding_list_get_block_$delta";
-    if (is_callable($caller)) {
-      $content = $caller();
-      $block['subject'] = "";
-      $block['content'] = $content;
-    }
-    else {
-      $block['content'] = "tst $caller";      
-    }  
   }
   return $block;
-}
-
-function ding_list_get_blocks() {
-  return array(
-    'inspiration' => array(),
-    'calendar' => array(),
-    'blog' => array(),
-    'news' => array(),
-    'your_lists' => array(),
-    'your_activities' => array(),
-    'ding_list' => array(),
-    'loan_list' => array(),
-    'reserved_list' => array(),
-    'debt_list' => array(),
-    'user_edit' => array(),
-    'related_pages_list' => array()
-  );
-}
-
-function ding_list_tab_lists() {
-  return array(
-    'inspiration' => t('Inspiration'),
-    'calendar' => t('Calender'),
-    'blog' => t('Blog'),
-    'news' => t('News'),
-    'your_lists' => t('Your lists'),
-    'your_activities' => t('Your activities'),
-    'ding_list' => t('Ding list'),
-    'loan_list' => t('Loan list'),
-    'reserved_list' => t('Reserved list'),
-    'debt_list' => t('My debts'),
-    'user_edit' => t('Edit user'),
-  );
 }

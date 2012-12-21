@@ -1,15 +1,12 @@
 <?php
-// @todo PBJ
-//   Opdel denne fil i flere filer, som f.eks.
-//     - functions.inc : (denne fil) requires de andre, og har default functioner, som ding_list_allowed())
-//     - functions.handler.inc : har alle entity wrapper funktionerne, som get, create, delete og edit
-//
-
+/**
+ * @file
+ * API Functions.
+ */
+ 
 require_once(dirname(__FILE__) . '/functions.openlist.inc');
 require_once(dirname(__FILE__) . '/functions.handler.inc');
 
-// @todo ALL (pbj spørger).
-//   Har vi brug for denne funktionalitet, eller er det overflødigt?
 /**
  * Get the list types which has a set of specific operations available.
  *
@@ -47,22 +44,22 @@ function ding_list_get_random_user_list_item() {
 
   // No lists no result
   if ($lists === FALSE) {
-    return false;
+    return FALSE;
   }
 
   shuffle($lists);
 
   // Find a non empty list
-  foreach($lists as $list) {
+  foreach ($lists as $list) {
     $items = field_get_items('ding_type', $list, 'field_list_objects');
     if (isset($items[0]['target_id'])) {
       $element = entity_load_single('ding_type', $items[0]['target_id']);
-      $element_id = b14_tools_get_value('ding_type', $element, 'field_ting_object');
+      $element_id = ding_helper_get_value('ding_type', $element, 'field_ting_object');
       $ting_entity = ting_object_load($element_id);
       return $ting_entity;
     }
   }
-  return false;
+  return FALSE;
 
 }
 
@@ -85,7 +82,7 @@ function ding_list_allowed(&$list, $operation) {
     $list = entity_load_single('ding_type', $list);
   }
 
-  return in_array($operation, $list_operations[b14_tools_get_value('ding_type', $list, 'field_list_type')]);
+  return in_array($operation, $list_operations[ding_helper_get_value('ding_type', $list, 'field_list_type')]);
 }
 
 /**
@@ -125,9 +122,9 @@ function ding_list_load_keys($user, $lid, $key_type = FALSE) {
     $elements = entity_load('ding_type', $keys);
     $keys = array();
     foreach ($elements as $element) {
-      $type = b14_tools_get_value('ding_type', $element, 'field_element_type');
+      $type = ding_helper_get_value('ding_type', $element, 'field_element_type');
       if ($type !== FALSE && (!$key_type || $type === 'taxonomy_term' ) ) {
-        $element_id = b14_tools_get_value('ding_type', $element, 'field_' . $type);
+        $element_id = ding_helper_get_value('ding_type', $element, 'field_' . $type);
         $keys[] = $element_id;
       }
     }
@@ -162,9 +159,9 @@ function ding_list_has_ding_list_element(&$list, $type, $id) {
   $elements = ding_list_load_elements($list);
 
   foreach ($elements as $element) {
-    $element_type = b14_tools_get_value('ding_type', $element, 'field_element_type');
+    $element_type = ding_helper_get_value('ding_type', $element, 'field_element_type');
     if ($element_type !== FALSE && $element_type === $type) {
-      $element_id = b14_tools_get_value('ding_type', $element, 'field_' . $element_type);
+      $element_id = ding_helper_get_value('ding_type', $element, 'field_' . $element_type);
       if ($element_id !== FALSE && $element_id === $id) {
         return $element;
       }
@@ -205,7 +202,7 @@ function ding_list_set_element_position(&$list, $element, $previous = FALSE, $te
   }
   
   
-  $items = b14_tools_get_items('ding_type', $list, 'field_list_objects');
+  $items = ding_helper_get_items('ding_type', $list, 'field_list_objects');
   $new_order = array();
   foreach ($items as $key => $item) {
     if ($item['target_id'] !== $element->id) {
@@ -249,7 +246,7 @@ function ding_list_set_order(&$list, $order) {
   
   $element_map = ding_list_create_dinglist_map('ding_list_element', $order);
   
-  $old_order = b14_tools_get_items('ding_type', $list, 'field_list_objects');
+  $old_order = ding_helper_get_items('ding_type', $list, 'field_list_objects');
   
   $list->field_list_objects[LANGUAGE_NONE] = array();
   foreach ($order as $item) {
@@ -281,7 +278,7 @@ function ding_list_setup_autocreated($account = NULL) {
   // $auto_create variable.
   if ($lists !== FALSE) {
     foreach ($lists as $list) {
-      $type = b14_tools_get_value('ding_type', $list, 'field_list_type');
+      $type = ding_helper_get_value('ding_type', $list, 'field_list_type');
       unset($auto_create[$type]);
     }
   }
@@ -307,8 +304,8 @@ function ding_list_update_historical_loans($account = NULL) {
   // Get the historical loan list.
   $list = ding_list_get_list(DING_LIST_TYPE_LOAN_HISTORY, $account);
     
-  $saveList = FALSE;
-  if(ding_user_is_provider_user($account)) {
+  $save_list = FALSE;
+  if (ding_user_is_provider_user($account)) {
     try {
       $creds = ding_user_get_creds($account);
       if (!empty($creds['name'])) {
@@ -322,13 +319,13 @@ function ding_list_update_historical_loans($account = NULL) {
         $doc = $alma->request('patron/loans/historical', array('borrCard' => $creds['name'], 'fromDate' => date('Y-m-d', $latest)));
         
         foreach ($doc->getElementsByTagName('catalogueRecord') as $item) {
-          $loanDate = strtotime($item->parentNode->getAttribute('loanDate'));
+          $loan_date = strtotime($item->parentNode->getAttribute('loanDate'));
           // We only add loans from yesterday.
-          if ($loanDate < $today) {
-            $saveList = TRUE;
+          if ($loan-date < $today) {
+            $save_list = TRUE;
             $ding_entity_id = variable_get('ting_agency', '') . ':' . $item->getAttribute('id');
             ding_list_create_ding_list_element($list, 'ting_object', $ding_entity_id, $account, FALSE);
-            $latest = max($latest, $loanDate);
+            $latest = max($latest, $loan_date);
           }
         }
       }
@@ -338,9 +335,56 @@ function ding_list_update_historical_loans($account = NULL) {
     }
   }
   
-  if ($saveList) {
+  if ($save_list) {
     // Set the latest time to tomorrow.
     $latest = mktime(0, 0, 0, date('n', $latest), date('j', $latest) + 1, date('Y', $latest));
     ding_list_edit_ding_list($list, $list->title, $latest);
   }
+}
+
+/**
+ * Load recent nodes tagged with $tids
+ *
+ * @param $tids
+ *  An array of taxonomy term ids to match with nodes. The function will Load
+ *  nids of nodes which are tagged with one or more of these ids.
+ *  This parameter is required.
+ * @param $type
+ *  If provided the result will only contain nodes of this node type.
+ * @param $limit
+ *  If provided the result will be limited to this number.
+ *
+ * @return
+ *  An array of nids tagged with one or more of the provided taxonomy terms.
+ */
+function ding_list_tids_to_nids($tids, $type = FALSE, $limit = FALSE) {
+
+  // No tids no nids
+  if (!isset($tids) || count($tids) == 0) {
+    return array();
+  }
+  // Setup select query with the provided tids as a condition
+  $query = db_select('taxonomy_index', 't')
+    ->condition('tid', $tids, 'IN')
+    ->addTag('node_access');
+  // Join the node table
+  $query->join('node', 'n', 'n.nid = t.nid');
+
+  // If a limit has been provided add this to the query
+  if ($limit !== FALSE) {
+    $query->range(0, $limit);
+  }
+
+  // Published nodes only
+  $query->condition('n.status', 1);
+
+  // If a limit has been provided filter on thi type condition
+  if ($type !== FALSE) {
+    $query->condition('n.type', $type);
+  }
+  // Select the nid and order by the time of creation.
+  $query->addField('t', 'nid');
+  $query->orderBy('t.created', "DESC");
+  // Return the column of nids.
+  return $query->execute()->fetchCol();
 }

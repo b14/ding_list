@@ -1,17 +1,25 @@
 <?php
+/**
+ * @file
+ * Forms.
+ */
 
 /**
  * The form used to create a ding_list object.
  */
 function ding_list_create_list_form($form, &$form_state) {
-  try {
-    $consent = ding_user_consent_get_consent('loan_history_store');
+  if (module_exists('ding_user_consent')) {
+    try {
+      $consent = ding_user_consent_get_consent('loan_history_store');
+    }
+    catch (Exception $e) {
+      $consent = NULL;
+    }
   }
-  catch (Exception $e) {
-    $consent = NULL;
+  else {
+    $consent = TRUE;
   }
-  if($consent) {
-  
+  if ($consent) {
     $existing = arg(2);
     if (isset($existing) && is_numeric($existing)) {
       $existing = ding_list_get_list($existing);
@@ -21,7 +29,8 @@ function ding_list_create_list_form($form, &$form_state) {
       if ($note !== FALSE) {
         $note = $note[0]['value'];
       }
-    } else {
+    }
+    else {
       $form_state['existing'] = FALSE;
     }
   
@@ -43,7 +52,8 @@ function ding_list_create_list_form($form, &$form_state) {
         '#type' => 'submit',
         '#value' => t('Edit list')
       );
-    } else {
+    }
+    else {
       $form['add_list'] = array(
         '#type' => 'submit',
         '#value' => t('Add new list')
@@ -67,6 +77,9 @@ function ding_list_create_list_form($form, &$form_state) {
   }
   return $form;
 }
+/**
+ * The create_list_form submit handler.
+ */
 function ding_list_create_list_form_submit($form, &$form_state) {
   // Create the new list object.
   if (!$form_state['existing']) {
@@ -84,7 +97,8 @@ function ding_list_create_list_form_submit($form, &$form_state) {
         )
       )
     );
-  } else {
+  }
+  else {
     $list = ding_list_get_list($form_state['existing']);
     
     ding_list_edit_ding_list(
@@ -106,5 +120,5 @@ function ding_list_create_list_form_submit($form, &$form_state) {
     ding_list_create_ding_list_element($list, 'ting_object', $form_state['values']['auto_add_ting']);
   }
   
-  $form_state['redirect'] = 'user/list/' . $list->id; //'user/manage-lists';
+  $form_state['redirect'] = 'user/list/' . $list->id;
 }

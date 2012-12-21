@@ -1,4 +1,8 @@
 <?php
+/**
+ * @file
+ * Functions handling the create, edit and delete api.
+ */
 
 /**
  * Get lists connected to a user.
@@ -125,26 +129,18 @@ function ding_list_create_ding_list_element(&$list, $type, $id, $account = NULL,
  *   A user object, to connect the list to. If nothing is supplied it will use
  *   the currently logged in user.
  */
-function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $account = NULL, $more = NULL, $openlist_id = FALSE, $fields = array()) {
+function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $DEPRECATED = NULL, $more = NULL, $openlist_id = FALSE, $fields = array()) {
   $list = entity_create('ding_type', array(
     'type' => 'ding_list',
     'title' => $title
   ));
-  
-  // The entity_create automatically set the entity uid to the current user so
-  // we only need to change this if specified.
-  if ($account !== NULL) {
-    $list->uid = $account->uid;
-  } else {
-    global $user;
-    $account = $user;
-  }
 
   $list->field_list_type[LANGUAGE_NONE][0]['value'] = $type;
   
   if ($more !== NULL) {
     $list->more = $more;
-  } else if (isset($list->more)) {
+  }
+  elseif (isset($list->more)) {
     $more = $list->more;
   }
   
@@ -157,7 +153,7 @@ function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $a
   if (module_exists('ting_openlist') && $openlist_id === FALSE) {
     // $creds = ding_user_get_creds($account);
     // if ($creds) {
-      $openlist_id = ting_openlist_request('createList', array($account->name, $title, $type, array('more' => $more, 'fields' => $fields)));
+      $openlist_id = ting_openlist_request('createList', array(ting_openlist_current_user_identifier(), $title, $type, array('more' => $more, 'fields' => $fields)));
     // }
   }
   if ($openlist_id !== FALSE) {
@@ -202,7 +198,8 @@ function ding_list_edit_ding_list(&$list, $title, $more = NULL, $tell_openlist =
   
   if ($more !== NULL) {
     $list->more = $more;
-  } else {
+  }
+  else {
     $more = $list->more;
   }
   
@@ -255,7 +252,7 @@ function ding_list_detach_ding_list_element(&$list, $element_ids = array(), $sav
   }
 
   // Get the ding_list_elements attached to the ding_list.
-  $items = b14_tools_get_items('ding_type', $list, 'field_list_objects');
+  $items = ding_helper_get_items('ding_type', $list, 'field_list_objects');
 
   // Run through the ding_list_elements, and determine if they should be
   // removed or kept.
@@ -318,7 +315,7 @@ function ding_list_delete_list($list, $tell_openlist = TRUE) {
   // Get a list of all the attached elements, and detach them.
   // Detach also deletes the element.
   $keys = array();
-  $items = b14_tools_get_items('ding_type', $list, 'field_list_objects');
+  $items = ding_helper_get_items('ding_type', $list, 'field_list_objects');
   foreach ($items as $item) {
     $keys[] = $item['target_id'];
   }
@@ -354,8 +351,10 @@ function ding_list_load_elements(&$list) {
     $list = entity_load_single('ding_type', $list);
   }
   
-  if($list)
+  if ($list) {
     $items = field_get_items('ding_type', $list, 'field_list_objects');
+  }
+  
   if ($items !== FALSE) {
     // Run through all the elements to get the target ids.
     // This way we can load all the objects with a single call instead of
@@ -431,7 +430,7 @@ function ding_list_edit_ding_list_element(&$element, $type = NULL, $id = NULL, $
     $element = entity_load_single('ding_type', $element);
   }
 
-  $old_type = b14_tools_get_value('ding_type', $element, 'field_element_type');
+  $old_type = ding_helper_get_value('ding_type', $element, 'field_element_type');
   if ($type !== NULL) {
     $element->field_element_type[LANGUAGE_NONE][] = array('value' => $type);
   }
@@ -439,7 +438,7 @@ function ding_list_edit_ding_list_element(&$element, $type = NULL, $id = NULL, $
     $type = $old_type;
   }
   
-  $old_id = b14_tools_get_value('ding_type', $element, 'field_' . $type);
+  $old_id = ding_helper_get_value('ding_type', $element, 'field_' . $type);
   if ($id !== NULL) {
     $element->{'field_' . $type}[LANGUAGE_NONE][] = array('value' => $id);
   }

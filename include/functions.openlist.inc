@@ -1,4 +1,8 @@
 <?php
+/**
+ * @file
+ * Functions related to openlist.
+ */
 
 /**
  * Create an array that maps a list of openlist ids to the local entity
@@ -14,7 +18,7 @@
  *   arr[openlist_id] = entity
  */
 function ding_list_create_openlist_map($type, $openlist_ids) {
-  if (empty($openlist_ids)) {
+  if (!module_exists('ting_openlist') || empty($openlist_ids)) {
     return array();
   }
   
@@ -80,18 +84,13 @@ function ding_list_create_dinglist_map($type, $dinglist_ids) {
  * @param $account
  *   Which accoun to synchronize (defaults to the logged in user).
  */
-function ding_list_sync_openlist($account = NULL) {
-  if ($account === NULL) {
-    global $user;
-    $account = $user;
+function ding_list_sync_openlist() {
+  if (!module_exists('ting_openlist')) {
+    return;
   }
 
-  //
-  // Make sure the user is a library user.
-  // $creds = ding_user_get_creds($account);
-  // if (!$creds) {
-    // return;
-  // }
+  global $user;
+  $account = $user;
   
   //
   // Get the last modified timestamp.
@@ -99,8 +98,8 @@ function ding_list_sync_openlist($account = NULL) {
   
   //
   // Fetch the modified lists and elements.
-  $openlist_lists = ting_openlist_request('getLists', array($account->name, $from));
-  $openlist_elements = ting_openlist_request('getUserElements', array($account->name, $from));
+  $openlist_lists = ting_openlist_request('getLists', array(ting_openlist_current_user_identifier(), $from));
+  $openlist_elements = ting_openlist_request('getUserElements', array(ting_openlist_current_user_identifier(), $from));
   
   //
   // Create a 2 arrays that map the openlist ids to local ids.
@@ -139,7 +138,6 @@ function ding_list_sync_openlist($account = NULL) {
       
       // We only edit the list if its status is 1
       if ($openlist_list['status'] == 1) {
-        // b14dpm(3, 'List edit: ' . $openlist_list['list_id']);
         if (!isset($openlist_list['data']['fields']) || !is_array($openlist_list['data']['fields'])) {
           $openlist_list['data']['fields'] = array();
         }
@@ -147,7 +145,6 @@ function ding_list_sync_openlist($account = NULL) {
       }
       // Remove it locally
       else {
-        // b14dpm(3, 'List delete: ' . $openlist_list['list_id']);
         ding_list_delete_list($local_list, FALSE);
       }
     }
@@ -155,7 +152,6 @@ function ding_list_sync_openlist($account = NULL) {
     else {
       // We only create the list, if it has the status of 1
       if ($openlist_list['status'] == 1) {
-        // b14dpm(3, 'List create: ' . $openlist_list['list_id']);
         if (!isset($openlist_list['data']['fields']) || !is_array($openlist_list['data']['fields'])) {
           $openlist_list['data']['fields'] = array();
         }
@@ -180,8 +176,6 @@ function ding_list_sync_openlist($account = NULL) {
       
       // We only edit the list if its status is 1
       if ($openlist_element['status'] == 1) {
-        // b14dpm(3, 'Element edit: ' . $openlist_element['element_id']);
-        
         $local_element = $element_map[$openlist_element['element_id']];
         $local_list = &$list_map[$openlist_element['list_id']];
         
@@ -194,13 +188,14 @@ function ding_list_sync_openlist($account = NULL) {
         
         if ($openlist_element['previous'] > 0) {
           $previous_element = $element_map[$openlist_element['previous']];
-        } else {
+        }
+        else {
           $previous_element = new stdClass();
           $previous_element->id = 0;
         }
         
         
-        $items = b14_tools_get_items('ding_type', $local_list, 'field_list_objects');
+        $items = ding_helper_get_items('ding_type', $local_list, 'field_list_objects');
         $new_order = array();
         foreach ($items as $key => $item) {
           if ($item['target_id'] !== $local_element->id) {
@@ -222,7 +217,6 @@ function ding_list_sync_openlist($account = NULL) {
       }
       // Remove it locally
       else {
-        // b14dpm(3, 'Element delete: ' . $openlist_element['element_id']);
         // Update the save_list, so we can save all the lists changed
         $save_list[$openlist_element['list_id']] = $openlist_element['modified'];
         
@@ -238,7 +232,6 @@ function ding_list_sync_openlist($account = NULL) {
     else {
       // We only create the list, if it has the status of 1
       if ($openlist_element['status'] == 1) {
-        // b14dpm(3, 'Element create: ' . $openlist_element['element_id']);
         // Update the save_list, so we can save all the lists changed
         $save_list[$openlist_element['list_id']] = $openlist_element['modified'];
         
