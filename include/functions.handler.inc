@@ -7,22 +7,25 @@
 /**
  * Get lists connected to a user.
  *
- * @param $account
- *   The user account on who you want to get the reservations from (if none is
- *   given it will default to the current user).
  * @param $list_type
  *   The list type to filter. If you supply an array it will filter by all the
  *   lists in that array (using OR).
  *   Combining this with the ding_list_get_list_types_by_operations(), will
  *   give an easy way of selecting specific lists which can do specific
  *   operations.
+ * @param $account
+ *   The user account on who you want to get the reservations from (if none is
+ *   given it will default to the current user).
  * @param $range
  *   From where to where, in an array(from, length).
  * @param $order_by
  *   Order by in an array ('what', 'direction'), is ('changed', 'DESC') by
  *   default. Note that you can only order by property.
+ *
+ * @return
+ *   An array of ding_list entities. FALSE otherwise.
  */
-function ding_list_get_lists($list_type = NULL, $account = NULL, $range = NULL, $order_by = array('changed', 'DESC')) {
+function ding_list_get_lists($list_type = NULL, $account = NULL, $range = array(), $order_by = array('changed', 'DESC')) {
   if ($account === NULL) {
     global $user;
     $account = $user;
@@ -38,7 +41,7 @@ function ding_list_get_lists($list_type = NULL, $account = NULL, $range = NULL, 
     $query->fieldCondition('field_list_type', 'value', $list_type);
   }
 
-  if ($range !== NULL && is_array($range)) {
+  if (count($range) == 2) {
     $query->range($range[0], $range[1]);
   }
 
@@ -58,11 +61,8 @@ function ding_list_get_lists($list_type = NULL, $account = NULL, $range = NULL, 
  *
  * @param $list
  *   The ding_list object, which the newly created ding_list_element is
- *   attached to.
- *   If this is a numeric value, it will automatically load the ding_list
- *   object.
- *   (note that after the function has been run your number will be recasted
- *   as an Entity object).
+ *   attached to. By reference, so you don't need to update the list after
+ *   the element has been added.
  * @param $type
  *   Type of the ding_list_element. This is put into the field_element_type,
  *   and determines which field_[TYPE] to save the $id in.
@@ -75,15 +75,14 @@ function ding_list_get_lists($list_type = NULL, $account = NULL, $range = NULL, 
  *   The ding_list_element object.
  */
 function ding_list_create_ding_list_element(&$list, $type, $id, $account = NULL, $save_list = TRUE, $openlist_id = FALSE) {
-  if (is_numeric($list)) {
-    $list = entity_load_single('ding_type', $list);
-  }
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
 
   $element = entity_create('ding_type', array(
     'type' => 'ding_list_element',
     'title' => '[' . $list->id . ']' . $list->title . ': ' . $type . ' [' . $id . ']'
   ));
-  
+
   // The entity_create automatically set the entity uid to the current user so
   // we only need to change this if specified.
   if ($account !== NULL) {
@@ -95,9 +94,15 @@ function ding_list_create_ding_list_element(&$list, $type, $id, $account = NULL,
   $element->{'field_' . $type}[LANGUAGE_NONE][] = array('value' => $id);
 
   if (module_exists('ting_openlist') && $openlist_id === FALSE) {
-    $openlist_id = ting_openlist_request('createElement', array($list->openlist_id, array('id' => $id, 'type' => $type)));
+    try {
+      $openlist_id = ding_provider_invoke('openlist', 'request', 'createElement', array($list->openlist_id, array('id' => $id, 'type' => $type)));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      drupal_set_message(t("An error occurred, your element wasn't created. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
+    }
   }
-  
+
   if ($openlist_id !== FALSE) {
     $element->openlist_id = $openlist_id;
   }
@@ -129,21 +134,30 @@ function ding_list_create_ding_list_element(&$list, $type, $id, $account = NULL,
  *   A user object, to connect the list to. If nothing is supplied it will use
  *   the currently logged in user.
  */
-function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $DEPRECATED = NULL, $more = NULL, $openlist_id = FALSE, $fields = array()) {
+function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $account = NULL, $more = NULL, $openlist_id = FALSE, $fields = array()) {
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
+
   $list = entity_create('ding_type', array(
     'type' => 'ding_list',
     'title' => $title
   ));
 
+  // The entity_create automatically set the entity uid to the current user so
+  // we only need to change this if specified.
+  if ($account !== NULL) {
+    $list->uid = $account->uid;
+  }
+
   $list->field_list_type[LANGUAGE_NONE][0]['value'] = $type;
-  
+
   if ($more !== NULL) {
     $list->more = $more;
   }
   elseif (isset($list->more)) {
     $more = $list->more;
   }
-  
+
   if (!empty($fields)) {
     foreach ($fields as $field) {
       $list->{$field['name']}[LANGUAGE_NONE] = array(array($field['value_type'] => $field['value']));
@@ -151,11 +165,15 @@ function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $D
   }
 
   if (module_exists('ting_openlist') && $openlist_id === FALSE) {
-    // $creds = ding_user_get_creds($account);
-    // if ($creds) {
-      $openlist_id = ting_openlist_request('createList', array(ting_openlist_current_user_identifier(), $title, $type, array('more' => $more, 'fields' => $fields)));
-    // }
+    try {
+      $openlist_id = ding_provider_invoke('openlist', 'request', 'createList', array(ting_openlist_user_identifier($account), $title, $type, array('more' => $more, 'fields' => $fields)));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      drupal_set_message(t("An error occurred, your list wasn't created. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
+    }
   }
+
   if ($openlist_id !== FALSE) {
     $list->openlist_id = $openlist_id;
   }
@@ -169,14 +187,11 @@ function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $D
  * Edit an existing ding_list.
  *
  * @param $list
- *   If this is a numeric value, it will automatically load the ding_list
- *   object.
- *   (note that after the function has been run your number will be recasted
- *   as an Entity object).
+ *   The list object.
  * @param $title
  *   The new title of the list.
  * @param $more
- *   
+ *
  * @param $tell_openlist
  *   If this is true (as by default) it will tell the openlist service about
  *   the changes. When synchronizing this would be set to false.
@@ -185,40 +200,42 @@ function ding_list_create_ding_list($title, $type = DING_LIST_TYPE_USER_LIST, $D
  *   The ding_list object
  */
 function ding_list_edit_ding_list(&$list, $title, $more = NULL, $tell_openlist = TRUE, $fields = array()) {
-  // Auto load the ding_list if $list is a number.
-  if (is_numeric($list)) {
-    $list = entity_load_single('ding_type', $list);
-  }
-  
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
+
   if ($list->title === $title && ($more === NULL || $list->more === $more) && empty($fields)) {
     return $list;
   }
-  
+
   $list->title = $title;
-  
+
   if ($more !== NULL) {
     $list->more = $more;
   }
-  else {
-    $more = $list->more;
-  }
-  
+
   if (!empty($fields)) {
     foreach ($fields as $field) {
       $list->{$field['name']}[LANGUAGE_NONE] = array(array($field['value_type'] => $field['value']));
     }
   }
 
-  if (module_exists('ting_openlist') && $tell_openlist === TRUE) {
-    if ($list->openlist_id > 0) {
-      ting_openlist_request('editList', array($list->openlist_id, $list->title, array(
-        'more' => $list->more,
-        'fields' => $fields
+  if (module_exists('ting_openlist') && $tell_openlist === TRUE && $list->openlist_id > 0) {
+    try {
+      ding_provider_invoke('openlist', 'request', 'editList', array(
+        $list->openlist_id,
+        $list->title,
+        array(
+          'more' => $list->more,
+          'fields' => $fields
         )
       ));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      drupal_set_message(t("An error occurred while changing your list. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
     }
   }
-  
+
   $list->save();
 
   return $list;
@@ -229,30 +246,25 @@ function ding_list_edit_ding_list(&$list, $title, $more = NULL, $tell_openlist =
  * object.
  *
  * @param $list
- *   The ding_list object, the ding_list_element is attached to. This is
+ *   ding_list object, the ding_list_element is attached to. This is
  *   parsed by reference so you don't need to reload it after the update.
- *   If this is a numeric value, it will automatically load the ding_list
- *   object.
- *   (note that after the function has been run your number will be recasted
- *   as an Entity object).
  * @param $element_ids
  *   Array of ding_list_element ids to remove and detach.
  *
  * @return
- *   The count of element items actually deleted.
+ *   The count of element items actually deleted. Or FALSE if something went
+ *   wrong
  */
 function ding_list_detach_ding_list_element(&$list, $element_ids = array(), $save_list = TRUE, $tell_openlist = TRUE) {
-  // Auto load the ding_list if $list is a number.
-  if (is_numeric($list)) {
-    $list = entity_load_single('ding_type', $list);
-  }
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
 
   if (empty($element_ids)) {
     return 0;
   }
 
   // Get the ding_list_elements attached to the ding_list.
-  $items = ding_helper_get_items('ding_type', $list, 'field_list_objects');
+  $items = ding_base_get_items('ding_type', $list, 'field_list_objects');
 
   // Run through the ding_list_elements, and determine if they should be
   // removed or kept.
@@ -280,7 +292,14 @@ function ding_list_detach_ding_list_element(&$list, $element_ids = array(), $sav
     foreach ($result as $row) {
       $openlist_ids[] = $row->openlist_id;
     }
-    ting_openlist_request('deleteElement', array($openlist_ids));
+
+    try {
+      ding_provider_invoke('openlist', 'request', 'deleteElement', array($openlist_ids));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      // drupal_set_message(t("An error occurred while removing your element. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
+    }
   }
 
   // Delete the ding_list_elements.
@@ -307,6 +326,9 @@ function ding_list_detach_ding_list_element(&$list, $element_ids = array(), $sav
  *   as an Entity object).
  */
 function ding_list_delete_list($list, $tell_openlist = TRUE) {
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
+
   // Auto load the ding_list if $list is a number.
   if (is_numeric($list)) {
     $list = entity_load_single('ding_type', $list);
@@ -315,7 +337,7 @@ function ding_list_delete_list($list, $tell_openlist = TRUE) {
   // Get a list of all the attached elements, and detach them.
   // Detach also deletes the element.
   $keys = array();
-  $items = ding_helper_get_items('ding_type', $list, 'field_list_objects');
+  $items = ding_base_get_items('ding_type', $list, 'field_list_objects');
   foreach ($items as $item) {
     $keys[] = $item['target_id'];
   }
@@ -324,8 +346,14 @@ function ding_list_delete_list($list, $tell_openlist = TRUE) {
     ding_list_detach_ding_list_element($list, $keys, TRUE, $tell_openlist);
   }
 
-  if (module_exists('ting_openlist') && $tell_openlist === TRUE) {
-    ting_openlist_request('deleteList', array($list->openlist_id));
+  if (module_exists('ting_openlist') && $tell_openlist === TRUE && $list->openlist_id > 0) {
+    try {
+      ding_provider_invoke('openlist', 'request', 'deleteList', array($list->openlist_id));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      drupal_set_message(t("An error occurred while deleting your list. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
+    }
   }
 
   // Remove the actual ding_list.
@@ -336,25 +364,16 @@ function ding_list_delete_list($list, $tell_openlist = TRUE) {
  * Load an array with the elements
  *
  * @param $list
- *   The ding_list to delete.
- *   If this is a numeric value, it will automatically load the ding_list
- *   object.
- *   (note that after the function has been run your number will be recasted
- *   as an Entity object).
+ *   The ding_list entity.
  *
  * @return
  *   An array with the elements in, or an empty array, if no elements exist.
  */
-function ding_list_load_elements(&$list) {
-  // Auto load the ding_list if $list is a number.
-  if (is_numeric($list)) {
-    $list = entity_load_single('ding_type', $list);
-  }
-  
+function ding_list_load_elements($list) {
   if ($list) {
     $items = field_get_items('ding_type', $list, 'field_list_objects');
   }
-  
+
   if ($items !== FALSE) {
     // Run through all the elements to get the target ids.
     // This way we can load all the objects with a single call instead of
@@ -363,11 +382,11 @@ function ding_list_load_elements(&$list) {
     foreach ($items as $item) {
       $keys[] = $item['target_id'];
     }
-    
+
     // Return all the elements.
     return entity_load('ding_type', $keys);
   }
-  
+
   return array();
 }
 
@@ -398,7 +417,7 @@ function ding_list_get_list($list, $account = NULL) {
   if (is_string($list)) {
     $list_element = ding_list_get_lists($list, $account, array(0, 1));
     if ($list_element !== FALSE) {
-      return current($list_element);
+      return array_shift($list_element);
     }
   }
 
@@ -409,10 +428,7 @@ function ding_list_get_list($list, $account = NULL) {
  * Edit an existing ding_list_element.
  *
  * @param $element
- *   If this is a numeric value, it will automatically load the
- *   ding_list_element object.
- *   (note that after the function has been run your number will be recasted
- *   as an Entity object).
+ *
  * @param $type
  *   The new type of the element
  * @param $id
@@ -425,36 +441,38 @@ function ding_list_get_list($list, $account = NULL) {
  *   The ding_list_element
  */
 function ding_list_edit_ding_list_element(&$element, $type = NULL, $id = NULL, $tell_openlist = TRUE) {
-  // Auto load the ding_list if $list is a number.
-  if (is_numeric($element)) {
-    $element = entity_load_single('ding_type', $element);
-  }
+  // Open a transaction, so we can rollback if ting_openlist
+  $transaction = db_transaction();
 
-  $old_type = ding_helper_get_value('ding_type', $element, 'field_element_type');
+  $old_type = ding_base_get_value('ding_type', $element, 'field_element_type');
   if ($type !== NULL) {
     $element->field_element_type[LANGUAGE_NONE][] = array('value' => $type);
   }
   else {
     $type = $old_type;
   }
-  
-  $old_id = ding_helper_get_value('ding_type', $element, 'field_' . $type);
+
+  $old_id = ding_base_get_value('ding_type', $element, 'field_' . $type);
   if ($id !== NULL) {
     $element->{'field_' . $type}[LANGUAGE_NONE][] = array('value' => $id);
   }
   else {
     $id = $old_id;
   }
-  
+
   // Don't save any changes to the database, if the new values are the same
   // as the old ones.
   if ($old_type === $type && $old_id === $id) {
     return $element;
   }
 
-  if (module_exists('ting_openlist') && $tell_openlist === TRUE) {
-    if ($element->openlist_id > 0) {
-      ting_openlist_request('editElement', array($element->openlist_id, array('id' => $id, 'type' => $type)));
+  if (module_exists('ting_openlist') && $tell_openlist === TRUE && $element->openlist_id > 0) {
+    try {
+      ding_provider_invoke('openlist', 'request', 'editElement', array($element->openlist_id, array('id' => $id, 'type' => $type)));
+    } catch (Exception $e) {
+      $transaction->rollback();
+      drupal_set_message(t("An error occurred while editing your element. Please contact the administrator if this problem persists."), 'error');
+      return FALSE;
     }
   }
 

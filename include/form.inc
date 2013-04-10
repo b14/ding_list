@@ -6,48 +6,47 @@
 
 /**
  * The form used to create a ding_list object.
+ *
+ * If an existing ding_list object is given, that object is editted instead
+ * of creating a new object.
+ *
+ * @param $existing
+ *   This is the existing ding_list object.
  */
-function ding_list_create_list_form($form, &$form_state) {
-  if (module_exists('ding_user_consent')) {
-    try {
-      $consent = ding_user_consent_get_consent('loan_history_store');
-    }
-    catch (Exception $e) {
-      $consent = NULL;
-    }
+function ding_list_create_list_form($form, &$form_state, $existing = FALSE) {
+  try {
+    $consent = ding_user_consent_get_consent('loan_history_store');
   }
-  else {
-    $consent = TRUE;
+  catch (Exception $e) {
+    $consent = FALSE;
   }
+  
   if ($consent) {
-    $existing = arg(2);
-    if (isset($existing) && is_numeric($existing)) {
-      $existing = ding_list_get_list($existing);
+    if ($existing !== FALSE) {
       $form_state['existing'] = $existing->id;
       
       $note = field_get_items('ding_type', $existing, 'field_notes');
       if ($note !== FALSE) {
         $note = $note[0]['value'];
       }
-    }
-    else {
+    } else {
       $form_state['existing'] = FALSE;
     }
   
     $form['title'] = array(
       '#type' => 'textfield',
-      '#title' => 'Titel',
+      '#title' => t('Title'),
       '#required' => TRUE,
-      '#default_value' => isset($existing->title) ? $existing->title : ''
+      '#default_value' => isset($existing->title) ? filter_xss($existing->title) : ''
     );
     
     $form['notes'] = array(
       '#type' => 'textarea',
-      '#title' => 'Note',
-      '#default_value' => isset($note) ? $note : ''
+      '#title' => t('Note'),
+      '#default_value' => isset($note) ? filter_xss($note) : ''
     );
     
-    if (isset($existing)) {
+    if ($existing) {
       $form['add_list'] = array(
         '#type' => 'submit',
         '#value' => t('Edit list')
@@ -97,6 +96,11 @@ function ding_list_create_list_form_submit($form, &$form_state) {
         )
       )
     );
+    
+    if ($list === FALSE) {
+      $form_state['redirect'] = 'user/manage-lists';
+      return;
+    }
   }
   else {
     $list = ding_list_get_list($form_state['existing']);

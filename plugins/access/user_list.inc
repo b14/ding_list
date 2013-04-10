@@ -54,7 +54,7 @@ function ding_list_user_list_ctools_access_check($conf, $context) {
  */
 function ding_list_user_list_ctools_access_summary($conf, $context) {
   if (!isset($conf['user_is_owner'])) {
-    return t('Error, ´choose your setting.');
+    return t('Error, Â´choose your setting.');
   }
   
   return t('@identifier @is_owner owner', array('@identifier' => $context->identifier, '@is_owner' => ($conf['user_is_owner']) ? 'is' : 'is not'));

@@ -13,10 +13,6 @@ function ding_list_block_info() {
     'info' => "Link to term search result",
   );
   
-  $blocks['create_ding_list'] = array(
-    'info' => "Create ding list.",
-  );
-
   return $blocks;
 }
 
@@ -27,34 +23,13 @@ function ding_list_block_view($delta) {
   
   $block = array();
   switch ($delta) {
-  case 'create_ding_list':
-  
-    $block['content'] = array(
-      '#theme' => 'ding_tabs',
-      '#name' => 'your_lists',
-      '#title' => t('Opret liste', array(), array('langcode' => 'da')),
-      '#navigation' => 'What is navigation',
-      '#more_title' => 'Læs mere her',
-      '#more_link' => 'page/samtykke',
-      '#mode_tabs' => array(),
-      '#tabs' => array(
-        'lists' => array(
-          '#theme' => 'ding_tabs_content',
-          '#title' => '',
-          '#content' => drupal_get_form('ding_list_create_list_form'),
-          '#type' => 'render',
-          '#no_tab_link' => TRUE,
-        ),
-      ),
-    );
-  break;
   case 'search_link':
+    dpm('SEARCH_LINK. Hvis du ser denne besked så sig til Philip hvor henne!!');
     if(arg(0) == 'taxonomy' && arg(1) == 'term' && is_numeric(arg(2))) {
       $term = taxonomy_term_load(arg(2));
       if(!empty($term->field_search_string)) {
         $string = rawurldecode($term->field_search_string[field_language('taxonomy_term', $term, 'field_search_string')][0]['value']);
       } else {
-        
         $string = rawurlencode($term->name);
       }
       global $base_path;
